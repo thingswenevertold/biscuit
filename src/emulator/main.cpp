@@ -32,7 +32,7 @@
 using Button = MappedInputManager::Button;
 
 // ------------------------------------------------------------
-// Activity factory — the ONE place to swap which real activity runs.
+// Activity factory — the ONE place to swap which BASE activity runs.
 // ------------------------------------------------------------
 static std::unique_ptr<Activity> makeActivity(GfxRenderer& r, MappedInputManager& in) {
   return std::unique_ptr<Activity>(new DiceRollerActivity(r, in));
@@ -40,32 +40,84 @@ static std::unique_ptr<Activity> makeActivity(GfxRenderer& r, MappedInputManager
 static const char* kActivityName = "DiceRoller";
 
 // ------------------------------------------------------------
-// Core state shared by GUI and self-test paths.
+// DemoConfirmActivity — emulator-only, NOT firmware source.
+//
+// Used solely to exercise the ActivityManager stack (pushActivity() /
+// finish() / popActivity()) in runSelfTest() below. The real confirmation
+// dialog (src/activities/util/ConfirmationActivity.*) can't be compiled
+// here yet: it includes its base class as "../Activity.h" (a literal
+// relative path), which the compiler resolves straight to the real
+// src/activities/Activity.h — bypassing the shim redirect that lets
+// path-qualified includes like "activities/Activity.h" pick up the mock.
+// Every activity under src/activities/util/ has this same pattern.
+// Fixing it for real means either guarding the real Activity.h/
+// ActivityManager.h with an EMULATOR_BUILD passthrough, or rewriting
+// those includes — both touch firmware source and are a deliberate
+// follow-up, not something to do incidentally here. See docs/emulator.md.
+// ------------------------------------------------------------
+class DemoConfirmActivity final : public Activity {
+ public:
+  DemoConfirmActivity(GfxRenderer& r, MappedInputManager& in, std::string heading)
+      : Activity("DemoConfirm", r, in), heading(std::move(heading)) {}
+
+  void render(RenderLock&&) override {
+    renderer.clearScreen();
+    renderer.drawCenteredText(12, 360, heading.c_str(), true, 1);
+    renderer.drawCenteredText(10, 400, "Right = confirm, Left = cancel");
+  }
+
+  void loop() override {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      setResult(ActivityResult{});
+      finish();
+    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      ActivityResult r; r.isCancelled = true;
+      setResult(std::move(r));
+      finish();
+    }
+  }
+
+ private:
+  std::string heading;
+};
+
+// ------------------------------------------------------------
+// Core state shared by GUI and self-test paths. Activity state now lives
+// in the global `activityManager` (test/mocks/ActivityManager.h + the
+// loop()/singleton defined at the bottom of test/mocks/Activity.h), so
+// real navigation code (finish(), startActivityForResult(), onGoHome())
+// works exactly like it does on the firmware — pushActivity/popActivity
+// swap the on-screen activity instead of being no-ops.
 // ------------------------------------------------------------
 struct Emu {
-  GfxRenderer renderer;
-  MappedInputManager input;
-  std::unique_ptr<Activity> activity;
+  GfxRenderer& renderer;
+  MappedInputManager& input;
 
-  Emu() {
-    activity = makeActivity(renderer, input);
-    activity->onEnter();
+  Emu() : renderer(activityManager.renderer), input(activityManager.mappedInput) {
+    activityManager.replaceActivity(makeActivity(renderer, input));
+    activityManager.loop();  // applies the replace, calls onEnter()
     render();
   }
 
-  void render() { activity->render(RenderLock{}); }
+  void render() {
+    if (Activity* a = activityManager.current()) a->render(RenderLock{});
+  }
 
-  // Deliver one physical-button press, then run the activity loop the same
-  // way the firmware does (InputManager.update() -> activity.loop()).
+  // Deliver one physical-button press+release, then run the activity loop
+  // the same way the firmware does (InputManager.update() -> activity.loop()).
+  // Both events are simulated because real activities react to either
+  // wasPressed() (e.g. DiceRoller) or wasReleased() (e.g. Confirmation).
   void press(Button b) {
     input.simulatePress(b);
-    activity->loop();
+    activityManager.loop();
+    input.simulateRelease(b);
+    activityManager.loop();
     render();
   }
 
   // Advance time-based behaviour (e.g. dice roll animation).
   void tick() {
-    activity->loop();
+    activityManager.loop();
     render();
   }
 };
@@ -108,7 +160,56 @@ static int runSelfTest() {
 
   bool ok = (hSelect != hSelect2) && (hSelect2 != hResult);
   printf("[selftest] screen changed on input: %s\n", ok ? "YES (pass)" : "NO (FAIL)");
-  return ok ? 0 : 1;
+
+  // --------------------------------------------------------------
+  // ActivityManager stack demo: push a second activity (DemoConfirmActivity
+  // — see its comment above for why it's a stand-in for the real
+  // ConfirmationActivity) on top of DiceRoller via the exact
+  // pushActivity()/finish() path real firmware code uses, confirm it, and
+  // verify popActivity() correctly resumes DiceRoller with its RESULT-screen
+  // state intact. This exercises the stack machinery added to
+  // test/mocks/ActivityManager.h + test/mocks/Activity.h, not just a single
+  // activity running in isolation.
+  // --------------------------------------------------------------
+  activityManager.pushActivity(std::unique_ptr<Activity>(
+      new DemoConfirmActivity(emu.renderer, emu.input, "Clear results?")));
+  activityManager.loop();  // applies the push, calls DemoConfirmActivity::onEnter()
+  emu.render();
+  uint64_t hConfirm = fbHash(emu.renderer);
+  emu.renderer.saveBMP("emulator_selftest_3_confirm_pushed.bmp");
+  printf("[selftest] pushed DemoConfirm hash=%016llx (stackDepth=%zu)\n",
+         (unsigned long long)hConfirm, activityManager.stackDepth());
+
+  // Right = Confirm in DemoConfirmActivity -> finish() -> popActivity().
+  emu.press(Button::Right);
+  uint64_t hAfterPop = fbHash(emu.renderer);
+  emu.renderer.saveBMP("emulator_selftest_4_popped_back.bmp");
+  printf("[selftest] after confirm+pop hash=%016llx (stackDepth=%zu)\n",
+         (unsigned long long)hAfterPop, activityManager.stackDepth());
+
+  bool stackOk = (hConfirm != hResult)       // confirmation dialog actually drew something different
+              && (hAfterPop == hResult)      // popped back to the exact same DiceRoller RESULT frame
+              && (activityManager.stackDepth() == 0)
+              && (activityManager.current() != nullptr);
+  printf("[selftest] ActivityManager push/finish/pop stack: %s\n", stackOk ? "YES (pass)" : "NO (FAIL)");
+
+  // Edge case: Back on the BASE activity (empty stack) must goHome(), not
+  // crash. DiceRoller's first Back from RESULT just resets its own state to
+  // SELECT (handled internally, doesn't touch the stack) — a second Back
+  // from SELECT calls finish() -> popActivity() with an empty stack, which
+  // is the real goHome() path. No HomeActivity is wired into the native
+  // mock yet (see the goHome() comment in test/mocks/ActivityManager.h), so
+  // this currently lands on a blank screen — expected, documented interim
+  // behaviour, not a bug. What actually matters here: no crash, no
+  // orphaned/negative stack depth.
+  emu.press(Button::Back);  // RESULT -> SELECT, handled by DiceRoller itself
+  emu.press(Button::Back);  // SELECT -> finish() -> popActivity() -> goHome()
+  bool goHomeOk = (activityManager.stackDepth() == 0);
+  printf("[selftest] Back,Back at root -> goHome(): %s (current=%s)\n",
+         goHomeOk ? "YES (pass, no crash)" : "NO (FAIL)",
+         activityManager.current() ? "non-null" : "null (blank, expected until HomeActivity is wired)");
+
+  return (ok && stackOk && goHomeOk) ? 0 : 1;
 }
 
 // ============================================================

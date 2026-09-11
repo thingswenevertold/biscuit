@@ -65,15 +65,51 @@ advances.
 
 This is the *real* activity source compiled against mocks, not a copy.
 
+**`ActivityManager` now has real stack semantics** (`test/mocks/ActivityManager.h`
++ the out-of-line `ActivityManager::loop()` / global `activityManager` singleton
+defined at the bottom of `test/mocks/Activity.h`, once `Activity` is complete).
+It mirrors `src/activities/ActivityManager.h`'s pending-action model
+(push/pop/replace/goHome deferred to the next `loop()` call, so an activity
+never destroys itself mid-call) minus FreeRTOS/RenderLock, since native builds
+are single-threaded. Concretely, real navigation calls now do something:
+`Activity::finish()` → `activityManager.popActivity()`, `startActivityForResult()`
+→ `activityManager.pushActivity()`, `onGoHome()` → `activityManager.goHome()`.
+`runSelfTest()` in `src/emulator/main.cpp` proves this end-to-end: it pushes a
+second activity on top of DiceRoller, confirms it, and checks the pop resumes
+DiceRoller in its exact prior state (`stackDepth()` back to 0, framebuffer hash
+identical to before the push) — plus a Back-at-root case that reaches
+`goHome()` without crashing.
+
+`goHome()` is currently a stub: no `HomeActivity` is wired in, so it just clears
+the stack down to a blank screen instead of showing the real home/apps menu.
+Wiring `HomeActivity`/`AppsMenuActivity` in is the natural next step now that
+the stack itself works — see the limitation below.
+
 ## What's NOT wired up (yet)
 
-Everything else. Activities that pull in `RadioManager` (WiFi/BLE), the SD card
-filesystem, `ActivityManager` navigation, fonts from flash, PNG/JPEG decoders,
-etc. are not yet runnable because those mocks are stubs (no-ops). Good next
-candidates that are self-contained (no radio/SD): other `src/activities/apps/`
-utilities and games. Menu/navigation activities additionally need the
-`ActivityManager` mock fleshed out so `pushActivity`/`finish` actually change the
-on-screen activity.
+- **`HomeActivity` / `AppsMenuActivity`**: not a mock-fidelity problem this
+  time — `ActivityManager` is ready. The blocker is `AppsMenuActivity.cpp`
+  transitively `#include`s dozens of other activities (several wireless-tool
+  ones among them), so wiring it means either mocking `RadioManager`/SD first
+  or trimming which category tiles it pulls in for the emulator build.
+- **Anything under `src/activities/util/`** (`ConfirmationActivity`,
+  `KeyboardEntryActivity`, `FullScreenMessageActivity`, `BmpViewerActivity`):
+  their headers `#include "../Activity.h"` as a literal relative path. The
+  compiler resolves that straight to the real `src/activities/Activity.h`
+  (which drags in FreeRTOS) *before* it ever considers the `-Isrc/emulator/shim`
+  redirect — quote-include relative-to-current-file resolution wins over `-I`
+  search order. The include-redirection trick this emulator relies on simply
+  doesn't reach these files. Fixing it for real means either guarding
+  `src/activities/Activity.h`/`ActivityManager.h` themselves with an
+  `EMULATOR_BUILD` passthrough (touches firmware source, small but deliberate)
+  or rewriting those includes to the path-qualified form everything else uses.
+  Until then, `src/emulator/main.cpp` has a small `DemoConfirmActivity` — an
+  emulator-only stand-in with the same push/confirm/finish shape — used to
+  exercise the `ActivityManager` stack in `runSelfTest()`.
+- Anything else pulling in `RadioManager` (WiFi/BLE), the SD card filesystem,
+  fonts from flash, or PNG/JPEG decoders — those mocks are still no-op stubs.
+  Good next candidates that are fully self-contained: other
+  `src/activities/apps/` utilities and games that don't touch radio/SD/fonts.
 
 ## How the wiring works (architecture)
 
