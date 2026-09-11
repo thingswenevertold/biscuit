@@ -3,6 +3,14 @@
 // biscuit. native test mock — GfxRenderer
 // No-op renderer that tracks calls for assertions
 // ============================================================
+//
+// When EMULATOR_BUILD is defined (see [env:emulator] in platformio.ini),
+// this header forwards to BitmapRenderer, which draws into a real 480x800
+// 1-bit framebuffer so the interactive emulator can display live pixels.
+// Native unit tests do NOT define EMULATOR_BUILD and keep the no-op mock.
+#ifdef EMULATOR_BUILD
+#include "BitmapRenderer.h"
+#else
 
 #include <cstdint>
 #include <string>
@@ -59,3 +67,5 @@ class GfxRenderer {
   std::vector<DrawCall> drawCalls;
   void clearDrawCalls() { drawCalls.clear(); }
 };
+
+#endif  // EMULATOR_BUILD

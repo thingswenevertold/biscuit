@@ -15,3 +15,8 @@ build
 .history/
 /.venv
 *.local*
+
+# Native emulator / preview render dumps
+emulator_selftest_*.bmp
+emulator_selftest_*.png
+test/preview_*.bmp
