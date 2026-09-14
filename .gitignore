@@ -19,4 +19,5 @@ build
 # Native emulator / preview render dumps
 emulator_selftest_*.bmp
 emulator_selftest_*.png
+emulator_smoke_*.bmp
 test/preview_*.bmp
