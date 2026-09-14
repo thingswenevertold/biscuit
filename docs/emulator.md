@@ -92,20 +92,27 @@ the stack itself works — see the limitation below.
   transitively `#include`s dozens of other activities (several wireless-tool
   ones among them), so wiring it means either mocking `RadioManager`/SD first
   or trimming which category tiles it pulls in for the emulator build.
-- **Anything under `src/activities/util/`** (`ConfirmationActivity`,
-  `KeyboardEntryActivity`, `FullScreenMessageActivity`, `BmpViewerActivity`):
-  their headers `#include "../Activity.h"` as a literal relative path. The
-  compiler resolves that straight to the real `src/activities/Activity.h`
-  (which drags in FreeRTOS) *before* it ever considers the `-Isrc/emulator/shim`
+- **`src/activities/util/` relative-include blocker — FIXED.** Those headers
+  (`ConfirmationActivity`, `KeyboardEntryActivity`, `FullScreenMessageActivity`,
+  `BmpViewerActivity`) `#include "../Activity.h"` as a literal relative path, so
+  the compiler resolves it straight to the real `src/activities/Activity.h`
+  (which drags in FreeRTOS) *before* it considers the `-Isrc/emulator/shim`
   redirect — quote-include relative-to-current-file resolution wins over `-I`
-  search order. The include-redirection trick this emulator relies on simply
-  doesn't reach these files. Fixing it for real means either guarding
-  `src/activities/Activity.h`/`ActivityManager.h` themselves with an
-  `EMULATOR_BUILD` passthrough (touches firmware source, small but deliberate)
-  or rewriting those includes to the path-qualified form everything else uses.
-  Until then, `src/emulator/main.cpp` has a small `DemoConfirmActivity` — an
-  emulator-only stand-in with the same push/confirm/finish shape — used to
-  exercise the `ActivityManager` stack in `runSelfTest()`.
+  search order, and the shim never gets a chance. This is now fixed at the
+  source: the top of the real `src/activities/Activity.h` and
+  `src/activities/ActivityManager.h` are guarded with
+  `#ifdef EMULATOR_BUILD` → `#include "../../test/mocks/<same file>"`
+  `#else` <real content> `#endif`. Both that redirect and the shim resolve to
+  the *same physical* `test/mocks/*.h`, so `#pragma once` dedups them. The
+  `#else` branch is byte-for-byte the original file; `EMULATOR_BUILD` is defined
+  only by `[env:emulator]`, and native unit tests (`[env:native]`,
+  `-DNATIVE_TEST`) never reach these files, so both device and unit-test builds
+  are unaffected. This unblocks `util/*` — but those activities still need their
+  *other* dependencies (keyboard input, fonts) satisfied by mocks before they
+  actually link; wiring them into `build_src_filter` is the remaining step.
+  `src/emulator/main.cpp` still has the emulator-only `DemoConfirmActivity`
+  stand-in used by `runSelfTest()` until the real `ConfirmationActivity` is
+  wired.
 - Anything else pulling in `RadioManager` (WiFi/BLE), the SD card filesystem,
   fonts from flash, or PNG/JPEG decoders — those mocks are still no-op stubs.
   Good next candidates that are fully self-contained: other
@@ -129,6 +136,14 @@ The trick is include-path redirection, all local to `[env:emulator]`; nothing in
     (Native unit tests don't define `EMULATOR_BUILD` and keep the no-op mock.)
   - `src/emulator/shim/emu_prelude.h` is force-included (`-include`) to provide
     ambient `millis()/delay()/String`.
+- **The `EMULATOR_BUILD` header guard** (real `src/activities/Activity.h` /
+  `ActivityManager.h`) is the one deliberate touch of firmware source. It exists
+  because the `-Isrc/emulator/shim` redirect cannot intercept quote-includes
+  that use a relative path resolving to the real file (the `util/*`
+  `"../Activity.h"` case). The guard is inert on device builds. When adding new
+  firmware-source `#ifdef EMULATOR_BUILD` branches, keep them equally inert and
+  re-run `pio test -e native` (which does *not* define `EMULATOR_BUILD`) plus,
+  ideally, `pio run -e default` to confirm the device build still compiles.
 - `src/emulator/main.cpp` owns the Win32 window (`CreateWindowEx` + GDI
   `SetDIBitsToDevice` blit + `WM_KEYDOWN`/`WM_TIMER` message loop). The whole
   file is guarded by `#ifdef EMULATOR_BUILD`, so device/ESP32 builds see an empty
