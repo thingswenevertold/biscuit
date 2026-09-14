@@ -1,4 +1,14 @@
 #pragma once
+#ifdef EMULATOR_BUILD
+// Native emulator / unit-test build only — see the matching note in
+// src/activities/Activity.h. The real ActivityManager needs FreeRTOS; the
+// native build uses the mock stack machinery in test/mocks/ActivityManager.h
+// instead. Reached only when a util/* activity's "../Activity.h" chain pulls
+// in the real Activity.h, which includes "ActivityManager.h" relative to
+// src/activities/. This branch is inert on device/ESP32 builds (EMULATOR_BUILD
+// is defined only by [env:emulator]).
+#include "../../test/mocks/ActivityManager.h"
+#else
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -109,3 +119,4 @@ class ActivityManager {
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp
+#endif  // EMULATOR_BUILD

@@ -1,4 +1,21 @@
 #pragma once
+#ifdef EMULATOR_BUILD
+// Native emulator / unit-test build only. This real header transitively pulls
+// in FreeRTOS + hardware-coupled headers (ActivityManager.h, RenderLock.h,
+// GfxRenderer.h). Activities under src/activities/util/ include this file via
+// the literal relative path "../Activity.h", which the compiler resolves
+// straight to this file BEFORE the src/emulator/shim redirect (-I search order
+// loses to quote-include relative-to-current-file resolution). Redirecting here
+// to the native mock makes those activities compile natively. Both this path
+// and src/emulator/shim/activities/Activity.h converge on the same physical
+// mock file, so its #pragma once dedups them.
+//
+// This branch is ENTIRELY INERT on device/ESP32 builds: EMULATOR_BUILD is
+// defined only by [env:emulator] in platformio.ini. Native unit tests
+// ([env:native], -DNATIVE_TEST) do NOT define EMULATOR_BUILD and never reach
+// this file — they include test/mocks/Activity.h directly via -Itest/mocks.
+#include "../../test/mocks/Activity.h"
+#else
 #include <Logging.h>
 
 #include <cassert>
@@ -59,3 +76,4 @@ class Activity {
   void onGoHome();
   void onSelectBook(const std::string& path);
 };
+#endif  // EMULATOR_BUILD
