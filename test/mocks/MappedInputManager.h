@@ -12,15 +12,19 @@ class MappedInputManager {
 
   // Simulated state for tests
   Button lastPressed = Button::Back;
-  bool pressedFlag = false;
-  bool releasedFlag = false;
+  mutable bool pressedFlag = false;
+  mutable bool releasedFlag = false;
   unsigned long heldTime = 0;
 
-  bool wasPressed(Button b) { if (b == lastPressed && pressedFlag) { pressedFlag = false; return true; } return false; }
-  bool wasReleased(Button b) { if (b == lastPressed && releasedFlag) { releasedFlag = false; return true; } return false; }
-  bool isPressed(Button) { return false; }
-  unsigned long getHeldTime() { return heldTime; }
-  int getPressedFrontButton() { return -1; }
+  // const: the real (hardware) MappedInputManager's wasPressed/wasReleased/
+  // isPressed/getHeldTime are const-qualified (ButtonNavigator holds a
+  // `const MappedInputManager*`), so this mock must match that signature
+  // even though it mutates edge-triggered flags — hence `mutable` above.
+  bool wasPressed(Button b) const { if (b == lastPressed && pressedFlag) { pressedFlag = false; return true; } return false; }
+  bool wasReleased(Button b) const { if (b == lastPressed && releasedFlag) { releasedFlag = false; return true; } return false; }
+  bool isPressed(Button) const { return false; }
+  unsigned long getHeldTime() const { return heldTime; }
+  int getPressedFrontButton() const { return -1; }
   void update() {}
 
   ButtonLabels mapLabels(const char* a, const char* b, const char* c, const char* d) {

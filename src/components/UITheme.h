@@ -1,5 +1,20 @@
 #pragma once
 
+// ------------------------------------------------------------
+// EMULATOR_BUILD redirect (same pattern as src/activities/Activity.h /
+// ActivityManager.h — see docs/emulator.md). A handful of firmware
+// activities #include this file via a literal relative path
+// ("../../components/UITheme.h" from src/activities/util/), which the
+// compiler resolves straight to this real file, bypassing the
+// -Isrc/emulator/shim redirect that lets path-qualified includes
+// ("components/UITheme.h") pick up the drawing shim. Guarding here closes
+// that gap for those relative-include call sites too. Inert on device
+// builds: EMULATOR_BUILD is only defined by [env:emulator].
+// ------------------------------------------------------------
+#ifdef EMULATOR_BUILD
+#include "../emulator/shim/components/UITheme.h"
+#else
+
 #include <functional>
 #include <memory>
 
@@ -32,3 +47,5 @@ class UITheme {
 
 // Helper macro to access current theme
 #define GUI UITheme::getInstance().getTheme()
+
+#endif  // EMULATOR_BUILD

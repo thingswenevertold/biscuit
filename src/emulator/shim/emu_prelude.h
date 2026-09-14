@@ -3,6 +3,7 @@
 // Arduino symbols (millis/delay/yield/String) that firmware code assumes are
 // globally available, WITHOUT pulling test/mocks/Arduino.h (which also defines
 // esp_random() and would clash with test/mocks/esp_random.h in the same TU).
+#include <algorithm>
 #include <cstdint>
 #include <string>
 

@@ -11,13 +11,8 @@
 #include <vector>
 #include <cmath>
 
-namespace EpdFontFamily {
-  enum Style { REGULAR = 0, BOLD = 1, ITALIC = 2 };
-}
-
-namespace HalDisplay {
-  enum RefreshMode { FAST_REFRESH = 0, HALF_REFRESH = 1, FULL_REFRESH = 2 };
-}
+#include "EpdFontFamily.h"
+#include "HalDisplay.h"
 
 struct Rect {
   int x, y, w, h;
@@ -191,12 +186,12 @@ class GfxRenderer {
     for (int i = 0; i < h; i++) { setPixel(x, y + i, true); setPixel(x + w - 1, y + i, true); }
   }
 
-  void drawLine(int x1, int y1, int x2, int y2) {
+  void drawLine(int x1, int y1, int x2, int y2, bool black = true) {
     int dx = abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
     int dy = -abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
     int err = dx + dy;
     while (true) {
-      setPixel(x1, y1, true);
+      setPixel(x1, y1, black);
       if (x1 == x2 && y1 == y2) break;
       int e2 = 2 * err;
       if (e2 >= dy) { err += dy; x1 += sx; }
