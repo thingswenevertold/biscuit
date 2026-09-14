@@ -29,6 +29,37 @@
 //      activity, include its header and change makeActivity() below. ----
 #include "activities/apps/DiceRollerActivity.h"
 
+// ---- Additional self-contained activities wired into the build so they
+//      compile against the mocks. Not all of these are the interactive
+//      boot activity (see makeActivity() below) — they are exercised via
+//      the `--smoke [name|all]` generic harness instead. See
+//      docs/emulator.md for the full wired-up list. ----
+#include "activities/apps/MinesweeperActivity.h"
+#include "activities/apps/SnakeActivity.h"
+#include "activities/apps/TetrisActivity.h"
+#include "activities/apps/SudokuActivity.h"
+#include "activities/apps/GameOfLifeActivity.h"
+#include "activities/apps/ChessActivity.h"
+#include "activities/apps/MazeActivity.h"
+#include "activities/apps/VoronoiActivity.h"
+#include "activities/apps/MatrixRainActivity.h"
+#include "activities/apps/CalculatorActivity.h"
+#include "activities/apps/UnitConverterActivity.h"
+#include "activities/apps/OtpGeneratorActivity.h"
+#include "activities/apps/CountdownActivity.h"
+#include "activities/apps/EtchASketchActivity.h"
+#include "activities/apps/MorseCodeActivity.h"
+#include "activities/apps/CipherActivity.h"
+#include "activities/apps/SteganographyActivity.h"
+#include "activities/apps/HabitTrackerActivity.h"
+#include "activities/apps/FlashcardActivity.h"
+#include "activities/util/ConfirmationActivity.h"
+#include "activities/util/FullScreenMessageActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
+#include "util/ButtonNavigator.h"
+
+#include <functional>
+
 using Button = MappedInputManager::Button;
 
 // ------------------------------------------------------------
@@ -38,48 +69,6 @@ static std::unique_ptr<Activity> makeActivity(GfxRenderer& r, MappedInputManager
   return std::unique_ptr<Activity>(new DiceRollerActivity(r, in));
 }
 static const char* kActivityName = "DiceRoller";
-
-// ------------------------------------------------------------
-// DemoConfirmActivity — emulator-only, NOT firmware source.
-//
-// Used solely to exercise the ActivityManager stack (pushActivity() /
-// finish() / popActivity()) in runSelfTest() below. The real confirmation
-// dialog (src/activities/util/ConfirmationActivity.*) can't be compiled
-// here yet: it includes its base class as "../Activity.h" (a literal
-// relative path), which the compiler resolves straight to the real
-// src/activities/Activity.h — bypassing the shim redirect that lets
-// path-qualified includes like "activities/Activity.h" pick up the mock.
-// Every activity under src/activities/util/ has this same pattern.
-// Fixing it for real means either guarding the real Activity.h/
-// ActivityManager.h with an EMULATOR_BUILD passthrough, or rewriting
-// those includes — both touch firmware source and are a deliberate
-// follow-up, not something to do incidentally here. See docs/emulator.md.
-// ------------------------------------------------------------
-class DemoConfirmActivity final : public Activity {
- public:
-  DemoConfirmActivity(GfxRenderer& r, MappedInputManager& in, std::string heading)
-      : Activity("DemoConfirm", r, in), heading(std::move(heading)) {}
-
-  void render(RenderLock&&) override {
-    renderer.clearScreen();
-    renderer.drawCenteredText(12, 360, heading.c_str(), true, 1);
-    renderer.drawCenteredText(10, 400, "Right = confirm, Left = cancel");
-  }
-
-  void loop() override {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-      setResult(ActivityResult{});
-      finish();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      ActivityResult r; r.isCancelled = true;
-      setResult(std::move(r));
-      finish();
-    }
-  }
-
- private:
-  std::string heading;
-};
 
 // ------------------------------------------------------------
 // Core state shared by GUI and self-test paths. Activity state now lives
@@ -94,6 +83,10 @@ struct Emu {
   MappedInputManager& input;
 
   Emu() : renderer(activityManager.renderer), input(activityManager.mappedInput) {
+    // Real ButtonNavigator (see shim/util/ButtonNavigator.h) needs this,
+    // same as firmware startup code, so onNext/onPrevious/onPressAndContinuous
+    // actually see button state instead of silently doing nothing.
+    ButtonNavigator::setMappedInputManager(input);
     activityManager.replaceActivity(makeActivity(renderer, input));
     activityManager.loop();  // applies the replace, calls onEnter()
     render();
@@ -136,6 +129,108 @@ static uint64_t fbHash(GfxRenderer& r) {
   return h;
 }
 
+// ============================================================
+// Generic smoke test — proves a newly-wired activity constructs, enters,
+// renders, survives a scripted round of button presses, and produces a
+// changed (non-crashing) framebuffer, without needing per-activity
+// scripted semantics like runSelfTest() above has for DiceRoller.
+// Run one at a time: `program.exe --smoke <Name>` (a crash only aborts
+// that one process, so the harness script below runs each in its own
+// process and reports pass/fail per activity). `--smoke all` runs every
+// case in one process (fine for quick iteration; a crash there just means
+// re-run individually to isolate which one).
+// ============================================================
+struct SmokeCase {
+  const char* name;
+  std::function<std::unique_ptr<Activity>(GfxRenderer&, MappedInputManager&)> make;
+};
+
+static const std::vector<SmokeCase>& smokeCases() {
+  static const std::vector<SmokeCase> cases = {
+    {"Minesweeper", [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<MinesweeperActivity>(r, i); }},
+    {"Snake",       [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<SnakeActivity>(r, i); }},
+    {"Tetris",      [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<TetrisActivity>(r, i); }},
+    {"Sudoku",      [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<SudokuActivity>(r, i); }},
+    {"GameOfLife",  [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<GameOfLifeActivity>(r, i); }},
+    {"Chess",       [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<ChessActivity>(r, i); }},
+    {"Maze",        [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<MazeActivity>(r, i); }},
+    {"Voronoi",     [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<VoronoiActivity>(r, i); }},
+    {"MatrixRain",  [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<MatrixRainActivity>(r, i); }},
+    {"Calculator",  [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<CalculatorActivity>(r, i); }},
+    {"UnitConverter", [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<UnitConverterActivity>(r, i); }},
+    {"OtpGenerator", [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<OtpGeneratorActivity>(r, i); }},
+    {"Countdown",   [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<CountdownActivity>(r, i); }},
+    {"EtchASketch", [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<EtchASketchActivity>(r, i); }},
+    {"Confirmation", [](GfxRenderer& r, MappedInputManager& i) {
+       return std::make_unique<ConfirmationActivity>(r, i, "Clear results?", "This cannot be undone.");
+     }},
+    {"FullScreenMessage", [](GfxRenderer& r, MappedInputManager& i) {
+       return std::make_unique<FullScreenMessageActivity>(r, i, "Saved!");
+     }},
+    {"KeyboardEntry", [](GfxRenderer& r, MappedInputManager& i) {
+       return std::make_unique<KeyboardEntryActivity>(r, i, "Enter Text", "", 32, false);
+     }},
+    {"MorseCode",     [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<MorseCodeActivity>(r, i); }},
+    {"Cipher",        [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<CipherActivity>(r, i); }},
+    {"Steganography", [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<SteganographyActivity>(r, i); }},
+    {"HabitTracker",  [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<HabitTrackerActivity>(r, i); }},
+    {"Flashcard",     [](GfxRenderer& r, MappedInputManager& i) { return std::make_unique<FlashcardActivity>(r, i); }},
+  };
+  return cases;
+}
+
+static bool smokeOne(const SmokeCase& c) {
+  printf("[smoke] %s: constructing + onEnter...\n", c.name);
+  activityManager.replaceActivity(c.make(activityManager.renderer, activityManager.mappedInput));
+  activityManager.loop();
+  Activity* a = activityManager.current();
+  if (!a) { printf("[smoke] %s: FAIL (no current activity after onEnter)\n", c.name); return false; }
+  a->render(RenderLock{});
+  uint64_t h0 = fbHash(activityManager.renderer);
+
+  auto press = [&](Button b) {
+    activityManager.mappedInput.simulatePress(b);
+    activityManager.loop();
+    activityManager.mappedInput.simulateRelease(b);
+    activityManager.loop();
+    if (Activity* cur = activityManager.current()) cur->render(RenderLock{});
+  };
+  // A generic scripted tour: navigate, interact, confirm, then a few ticks
+  // for anything time-based (animations), then Back (must not crash even
+  // if it pops all the way to goHome()).
+  press(Button::Down);
+  press(Button::Right);
+  press(Button::Up);
+  press(Button::Left);
+  press(Button::Confirm);
+  for (int i = 0; i < 5; i++) { activityManager.loop(); if (Activity* cur = activityManager.current()) cur->render(RenderLock{}); }
+  uint64_t h1 = fbHash(activityManager.renderer);
+  press(Button::Back);
+
+  char bmp[128];
+  snprintf(bmp, sizeof(bmp), "emulator_smoke_%s.bmp", c.name);
+  activityManager.renderer.saveBMP(bmp);
+
+  bool changed = (h0 != h1);
+  printf("[smoke] %s: h0=%016llx h1=%016llx changed=%s -> %s\n", c.name,
+         (unsigned long long)h0, (unsigned long long)h1, changed ? "yes" : "no",
+         "PASS (no crash)");
+  return true;
+}
+
+static int runSmoke(const std::string& which) {
+  bool anyRan = false;
+  bool allOk = true;
+  for (const auto& c : smokeCases()) {
+    if (which == "all" || which == c.name) {
+      anyRan = true;
+      allOk = smokeOne(c) && allOk;
+    }
+  }
+  if (!anyRan) { printf("[smoke] no case matched '%s'\n", which.c_str()); return 1; }
+  return allOk ? 0 : 1;
+}
+
 static int runSelfTest() {
   printf("[selftest] activity = %s\n", kActivityName);
   Emu emu;
@@ -162,25 +257,26 @@ static int runSelfTest() {
   printf("[selftest] screen changed on input: %s\n", ok ? "YES (pass)" : "NO (FAIL)");
 
   // --------------------------------------------------------------
-  // ActivityManager stack demo: push a second activity (DemoConfirmActivity
-  // — see its comment above for why it's a stand-in for the real
-  // ConfirmationActivity) on top of DiceRoller via the exact
-  // pushActivity()/finish() path real firmware code uses, confirm it, and
-  // verify popActivity() correctly resumes DiceRoller with its RESULT-screen
-  // state intact. This exercises the stack machinery added to
-  // test/mocks/ActivityManager.h + test/mocks/Activity.h, not just a single
-  // activity running in isolation.
+  // ActivityManager stack demo: push the REAL ConfirmationActivity
+  // (src/activities/util/ConfirmationActivity.*, wired for real now that
+  // the EMULATOR_BUILD Activity.h/ActivityManager.h/UITheme.h/fontIds.h
+  // relative-include redirects are in place — see docs/emulator.md) on top
+  // of DiceRoller via the exact pushActivity()/finish() path real firmware
+  // code uses, confirm it, and verify popActivity() correctly resumes
+  // DiceRoller with its RESULT-screen state intact. This exercises the
+  // stack machinery added to test/mocks/ActivityManager.h +
+  // test/mocks/Activity.h, not just a single activity running in isolation.
   // --------------------------------------------------------------
   activityManager.pushActivity(std::unique_ptr<Activity>(
-      new DemoConfirmActivity(emu.renderer, emu.input, "Clear results?")));
-  activityManager.loop();  // applies the push, calls DemoConfirmActivity::onEnter()
+      new ConfirmationActivity(emu.renderer, emu.input, "Clear results?", "This cannot be undone.")));
+  activityManager.loop();  // applies the push, calls ConfirmationActivity::onEnter()
   emu.render();
   uint64_t hConfirm = fbHash(emu.renderer);
   emu.renderer.saveBMP("emulator_selftest_3_confirm_pushed.bmp");
-  printf("[selftest] pushed DemoConfirm hash=%016llx (stackDepth=%zu)\n",
+  printf("[selftest] pushed Confirmation hash=%016llx (stackDepth=%zu)\n",
          (unsigned long long)hConfirm, activityManager.stackDepth());
 
-  // Right = Confirm in DemoConfirmActivity -> finish() -> popActivity().
+  // Right = Confirm in ConfirmationActivity -> finish() -> popActivity().
   emu.press(Button::Right);
   uint64_t hAfterPop = fbHash(emu.renderer);
   emu.renderer.saveBMP("emulator_selftest_4_popped_back.bmp");
@@ -346,6 +442,10 @@ static int runGui() {
 int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++) {
     if (std::string(argv[i]) == "--selftest") return runSelfTest();
+    if (std::string(argv[i]) == "--smoke") {
+      std::string which = (i + 1 < argc) ? argv[i + 1] : "all";
+      return runSmoke(which);
+    }
   }
   return runGui();
 }
