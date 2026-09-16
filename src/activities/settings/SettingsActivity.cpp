@@ -177,6 +177,9 @@ void SettingsActivity::toggleCurrentSetting() {
       Frontlight.setWarmth(SETTINGS.frontlightWarmth);
     }
 #endif
+    if (setting.valuePtr == &CrossPointSettings::ghostCleanupInterval) {
+      display.setGhostCleanupInterval(SETTINGS.ghostCleanupInterval);
+    }
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 

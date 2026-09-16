@@ -285,6 +285,8 @@ void setup() {
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, true);
 #endif
 
+  display.setGhostCleanupInterval(SETTINGS.ghostCleanupInterval);
+
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:

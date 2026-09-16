@@ -200,6 +200,10 @@ class CrossPointSettings {
   // (e.g. X4 Pro); harmlessly stored and ignored elsewhere.
   uint8_t frontlightBrightness = 60;
   uint8_t frontlightWarmth = 50;
+  // Ghosting cleanup: promote every Nth fast refresh to a full one to scrub
+  // residue left by partial waveforms. Lower = cleaner, higher = faster
+  // (a full refresh costs ~3x a fast one). 0 disables it.
+  uint8_t ghostCleanupInterval = 8;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)

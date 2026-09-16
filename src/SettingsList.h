@@ -51,6 +51,10 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                          "frontlightWarmth", StrId::STR_CAT_DISPLAY),
 #endif
 #endif
+      // Ghosting cleanup interval. Applies to every board -- partial waveforms
+      // leave residue everywhere -- so it sits outside the frontlight guards.
+      SettingInfo::Value(StrId::STR_GHOST_CLEANUP, &CrossPointSettings::ghostCleanupInterval, {0, 30, 1},
+                         "ghostCleanupInterval", StrId::STR_CAT_DISPLAY),
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,

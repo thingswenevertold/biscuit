@@ -66,6 +66,14 @@ class HalDisplay {
   bool supportsAsyncGrayscaleBase() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Ghosting cleanup: fast refreshes leave residue from the previous frame, so
+  // after `interval` consecutive fast refreshes one is promoted to a full
+  // refresh to scrub the panel. 0 disables the promotion entirely.
+  // A full refresh costs roughly 3x a fast one (measured on UC8179: ~1503ms vs
+  // ~564ms), which is why this is periodic rather than per-transition.
+  // Set from the settings layer -- lib/hal must not depend on src/.
+  void setGhostCleanupInterval(uint16_t interval) { ghostCleanupInterval = interval; }
+
   // Output polarity. The framebuffer remains in normal polarity; inversion is
   // applied by the display driver while sending it to the panel.
   void setInverted(bool inverted);
@@ -127,7 +135,14 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
+  // Returns the mode to actually use, promoting FAST to FULL once the ghosting
+  // interval is reached. Any non-fast refresh already scrubs the panel, so it
+  // resets the count too.
+  RefreshMode applyGhostCleanup(RefreshMode mode);
+
   EInkDisplay einkDisplay;
+  uint16_t ghostCleanupInterval = 0;  // 0 = disabled until the settings layer sets it
+  uint16_t fastRefreshesSinceFull = 0;
 };
 
 extern HalDisplay display;

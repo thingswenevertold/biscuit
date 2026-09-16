@@ -59,11 +59,28 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
+HalDisplay::RefreshMode HalDisplay::applyGhostCleanup(HalDisplay::RefreshMode mode) {
+  if (mode != RefreshMode::FAST_REFRESH) {
+    // A full or half refresh already scrubs accumulated residue.
+    fastRefreshesSinceFull = 0;
+    return mode;
+  }
+  if (ghostCleanupInterval == 0) {
+    return mode;
+  }
+  if (++fastRefreshesSinceFull >= ghostCleanupInterval) {
+    fastRefreshesSinceFull = 0;
+    return RefreshMode::FULL_REFRESH;
+  }
+  return mode;
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
+  mode = applyGhostCleanup(mode);
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
@@ -72,6 +89,7 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
     einkDisplay.requestResync(1);
   }
 
+  mode = applyGhostCleanup(mode);
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
 }
 
