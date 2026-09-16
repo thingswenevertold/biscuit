@@ -49,4 +49,21 @@ class AppsMenuActivity final : public Activity {
   void drawTile(int index, int x, int y, int w, int h, bool selected) const;
   void drawStatusBar() const;
 
+  // Shared tile-grid geometry used by both render() (drawing) and loop()
+  // (touch hit-testing) so the two never drift apart.
+  struct TileGridGeometry {
+    int sidePad;
+    int tileGap;
+    int gridTop;
+    int gridBottom;
+    int tileW;
+    int tileH;
+  };
+  TileGridGeometry getTileGridGeometry() const;
+
+  // Touch: tapping a tile selects it and launches it. Returns true if a tap
+  // landed on a tile (index written to `outIndex`). Called from loop(), never
+  // render() -- render() runs on a separate FreeRTOS task, so touch decisions
+  // that mutate activity state must stay on the loop() side.
+  bool hitTestTileGrid(int& outIndex) const;
 };

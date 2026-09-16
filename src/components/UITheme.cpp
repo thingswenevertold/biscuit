@@ -108,6 +108,31 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   return File;
 }
 
+int UITheme::hitTestList(const MappedInputManager& mappedInput, const Rect rect, const int itemCount,
+                         const int selectedIndex, const bool hasSubtitle) {
+  if (itemCount <= 0 || rect.height <= 0 || !mappedInput.hasTouch()) return -1;
+  // Same rowHeight/pageItems/pageStartIndex math as BaseTheme::drawList() --
+  // must stay in lockstep with it so a tap lands on the row that's actually
+  // drawn there (drawList paginates via BaseMetrics::values, not the active
+  // theme's metrics).
+  const int rowHeight =
+      hasSubtitle ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
+  const int pageItems = rect.height / rowHeight;
+  if (pageItems <= 0) return -1;
+  const int clampedSelected = selectedIndex >= 0 ? selectedIndex : 0;
+  const int pageStartIndex = clampedSelected / pageItems * pageItems;
+  const int visibleRows = (itemCount - pageStartIndex) < pageItems ? (itemCount - pageStartIndex) : pageItems;
+  if (visibleRows <= 0) return -1;
+
+  int row = 0;
+  if (mappedInput.rowTouch(row, rect.y, rowHeight, visibleRows, rect.x, rect.x + rect.width) !=
+      MappedInputManager::RowTouch::Tap) {
+    return -1;
+  }
+  const int index = pageStartIndex + row;
+  return (index >= 0 && index < itemCount) ? index : -1;
+}
+
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
 

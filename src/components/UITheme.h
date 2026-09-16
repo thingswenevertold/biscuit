@@ -21,6 +21,8 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+class MappedInputManager;
+
 class UITheme {
   // Static instance
   static UITheme instance;
@@ -35,6 +37,18 @@ class UITheme {
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle);
+
+  // Touch companion to BaseTheme::drawList(): mirrors its exact row height /
+  // pagination geometry (see BaseTheme.cpp) so a tap lands on the same row the
+  // user sees highlighted. Callers must invoke this from loop(), never from
+  // render() -- render() runs on its own FreeRTOS task (ActivityManagerRender)
+  // concurrently with loop(), so mutating activity state (e.g. selectorIndex)
+  // from render() would be an unsynchronized cross-task race. Returns the
+  // absolute item index whose row was tapped-and-released this frame, or -1 if
+  // none. `hasSubtitle` must match the rowSubtitle-vs-nullptr choice passed to
+  // the corresponding drawList() call for this list.
+  static int hitTestList(const MappedInputManager& mappedInput, Rect rect, int itemCount, int selectedIndex,
+                         bool hasSubtitle);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();

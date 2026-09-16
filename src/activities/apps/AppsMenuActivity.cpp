@@ -353,8 +353,16 @@ void AppsMenuActivity::loop() {
     }
   }
 
+  // === TOUCH: tap a tile to select + launch it ===
+  int tappedTile = -1;
+  const bool tileTapped = hitTestTileGrid(tappedTile);
+  if (tileTapped) {
+    selectorIndex = tappedTile;
+    requestUpdate();
+  }
+
   // === CONFIRM: open category ===
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || tileTapped) {
     std::unique_ptr<Activity> app;
     switch (selectorIndex) {
         case 0: {
@@ -546,23 +554,14 @@ void AppsMenuActivity::render(RenderLock&&) {
   renderer.drawText(SMALL_FONT_ID, 14, statusRowY, statusBuf);
 
   // === TILE GRID ===
-  constexpr int statusBarH = 40;
-  constexpr int buttonHintsH = 40;
-  constexpr int sidePad = 14;
-  constexpr int tileGap = 6;
-  constexpr int gridTop = statusBarH + 32;  // Below status info row (clearance for status text)
-  const int gridBottom = pageHeight - buttonHintsH - 2;
-  const int gridHeight = gridBottom - gridTop;
-
-  const int tileW = (pageWidth - sidePad * 2 - tileGap) / COLS;
-  const int tileH = (gridHeight - tileGap * (ROWS - 1)) / ROWS;
+  const auto geo = getTileGridGeometry();
 
   for (int i = 0; i < ITEM_COUNT; i++) {
     int row = i / COLS;
     int col = i % COLS;
-    int x = sidePad + col * (tileW + tileGap);
-    int y = gridTop + row * (tileH + tileGap);
-    drawTile(i, x, y, tileW, tileH, i == selectorIndex);
+    int x = geo.sidePad + col * (geo.tileW + geo.tileGap);
+    int y = geo.gridTop + row * (geo.tileH + geo.tileGap);
+    drawTile(i, x, y, geo.tileW, geo.tileH, i == selectorIndex);
   }
 
   // === BUTTON HINTS ===
@@ -608,6 +607,45 @@ void AppsMenuActivity::loadLastUsed() {
       file.close();
     }
   }
+}
+
+AppsMenuActivity::TileGridGeometry AppsMenuActivity::getTileGridGeometry() const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  constexpr int statusBarH = 40;
+  constexpr int buttonHintsH = 40;
+
+  TileGridGeometry geo{};
+  geo.sidePad = 14;
+  geo.tileGap = 6;
+  geo.gridTop = statusBarH + 32;  // Below status info row (clearance for status text)
+  geo.gridBottom = pageHeight - buttonHintsH - 2;
+  const int gridHeight = geo.gridBottom - geo.gridTop;
+  geo.tileW = (pageWidth - geo.sidePad * 2 - geo.tileGap) / COLS;
+  geo.tileH = (gridHeight - geo.tileGap * (ROWS - 1)) / ROWS;
+  return geo;
+}
+
+bool AppsMenuActivity::hitTestTileGrid(int& outIndex) const {
+  // Radar mode uses a circular layout; no rectangular grid to hit-test.
+  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::RADAR) return false;
+  if (!mappedInput.hasTouch()) return false;
+
+  const auto geo = getTileGridGeometry();
+  int row = 0;
+  int col = 0;
+  const auto rowResult =
+      mappedInput.rowTouch(row, geo.gridTop, geo.tileH + geo.tileGap, ROWS, geo.sidePad,
+                           geo.sidePad + COLS * (geo.tileW + geo.tileGap), geo.tileH);
+  if (rowResult != MappedInputManager::RowTouch::Tap) return false;
+  const auto colResult = mappedInput.colTouch(col, geo.sidePad, geo.tileW + geo.tileGap, COLS, geo.gridTop,
+                                              geo.gridBottom, geo.tileW);
+  if (colResult != MappedInputManager::RowTouch::Tap) return false;
+
+  const int index = row * COLS + col;
+  if (index < 0 || index >= ITEM_COUNT) return false;
+  outIndex = index;
+  return true;
 }
 
 void AppsMenuActivity::drawStatusBar() const {

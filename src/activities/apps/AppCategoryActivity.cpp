@@ -72,22 +72,22 @@ void AppCategoryActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex < count && !entries[selectorIndex].isSectionHeader) {
-      // Save last-used activity name
-      if (categoryIndex >= 0) {
-        char path[40];
-        snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", categoryIndex);
-        FsFile file;
-        if (Storage.openFileForWrite("APPS", path, file)) {
-          file.write((const uint8_t*)entries[selectorIndex].nameStrId, strlen(entries[selectorIndex].nameStrId));
-          file.close();
-        }
-      }
-      auto app = entries[selectorIndex].factory(renderer, mappedInput);
-      if (app) {
-        activityManager.pushActivity(std::move(app));
-      }
-    }
+    activateSelected(count);
+  }
+
+  // Touch: tapping a row selects it and activates it in one gesture. Hit-tested
+  // here in loop() (not render()) -- render() runs on a separate FreeRTOS task,
+  // so mutating selectorIndex from there would race the main loop task.
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int listTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int listHeight =
+      renderer.getScreenHeight() - listTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int tapped = UITheme::hitTestList(mappedInput, Rect{0, listTop, renderer.getScreenWidth(), listHeight}, count,
+                                          selectorIndex, /*hasSubtitle=*/true);
+  if (tapped >= 0 && !entries[tapped].isSectionHeader) {
+    selectorIndex = tapped;
+    activateSelected(count);
+    requestUpdate();
   }
 
   // Track that Back was physically pressed while this activity is active on screen
@@ -112,6 +112,24 @@ void AppCategoryActivity::loop() {
       finish();    // Short press: go back one level
     }
     return;
+  }
+}
+
+void AppCategoryActivity::activateSelected(const int count) {
+  if (selectorIndex < 0 || selectorIndex >= count || entries[selectorIndex].isSectionHeader) return;
+  // Save last-used activity name
+  if (categoryIndex >= 0) {
+    char path[40];
+    snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", categoryIndex);
+    FsFile file;
+    if (Storage.openFileForWrite("APPS", path, file)) {
+      file.write((const uint8_t*)entries[selectorIndex].nameStrId, strlen(entries[selectorIndex].nameStrId));
+      file.close();
+    }
+  }
+  auto app = entries[selectorIndex].factory(renderer, mappedInput);
+  if (app) {
+    activityManager.pushActivity(std::move(app));
   }
 }
 
