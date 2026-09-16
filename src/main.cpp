@@ -11,6 +11,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <XteinkDetect.h>
 #include <builtinFonts/all.h>
 
 #include <cstring>
@@ -192,6 +193,21 @@ void enterDeepSleep() {
 }
 
 void setupDisplayAndFonts() {
+#if !FREEINK_MCU_C3
+  // The X4 Pro's panel controller varies by production batch (SSD1677 vs
+  // UltraChip UC8179/UC8279). The C3 resolves this in HalGPIO::begin(), before
+  // SPI claims the display pins; the S3 skips that path, so probe here — before
+  // display.begin() selects and initializes a driver. Without this the profile
+  // default (SSD1677) is forced, and on a UC batch every BUSY wait times out.
+  static bool controllerResolved = false;
+  if (!controllerResolved) {
+    controllerResolved = true;
+    if (freeink::applyXteinkDisplayController()) {
+      LOG_DBG("MAIN", "Panel controller: UltraChip UC81xx variant detected");
+    }
+  }
+#endif
+
   display.begin();
   renderer.begin();
   activityManager.begin();
