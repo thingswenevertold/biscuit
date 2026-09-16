@@ -333,6 +333,9 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+  // Touch boards (X4 Pro) have no physical Back/Confirm/Up/Down buttons for this
+  // bar to label -- see BaseTheme::drawButtonHints for the full rationale.
+  if (gpio.hasTouch()) return;
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

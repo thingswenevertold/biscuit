@@ -196,6 +196,10 @@ class CrossPointSettings {
   uint8_t fadingFix = 0;
   // Invert the entire display framebuffer before pushing to e-ink (0 = normal, 1 = inverted)
   uint8_t displayInvert = 0;
+  // Frontlight brightness/warmth, 0-100%. Only meaningful on boards with a frontlight
+  // (e.g. X4 Pro); harmlessly stored and ignored elsewhere.
+  uint8_t frontlightBrightness = 60;
+  uint8_t frontlightWarmth = 50;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)

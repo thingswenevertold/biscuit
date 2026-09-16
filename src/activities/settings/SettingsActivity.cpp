@@ -1,7 +1,11 @@
 #include "SettingsActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#if FREEINK_CAP_FRONTLIGHT
+#include <HalFrontlight.h>
+#endif
 
 #include "ButtonRemapActivity.h"
 #include "CalibreSettingsActivity.h"
@@ -164,6 +168,15 @@ void SettingsActivity::toggleCurrentSetting() {
     } else {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
+#if FREEINK_CAP_FRONTLIGHT
+    // Apply frontlight changes live so the user sees the effect immediately,
+    // instead of only on the next boot.
+    if (setting.valuePtr == &CrossPointSettings::frontlightBrightness) {
+      Frontlight.setBrightness(SETTINGS.frontlightBrightness);
+    } else if (setting.valuePtr == &CrossPointSettings::frontlightWarmth) {
+      Frontlight.setWarmth(SETTINGS.frontlightWarmth);
+    }
+#endif
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 

@@ -94,6 +94,11 @@ class GfxRenderer {
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
+  // Translate a normalized touch point (0..1 on each axis, panel-native frame — swap/flip
+  // already applied by the touch driver) into logical (orientation-aware) screen
+  // coordinates, matching how drawing calls already interpret x/y. Board profiles without
+  // a touch panel never call this.
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const;
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;

@@ -2,6 +2,7 @@
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
@@ -13,6 +14,9 @@
 #include <SPI.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
+#if FREEINK_CAP_FRONTLIGHT
+#include <HalFrontlight.h>
+#endif
 
 #include <cstring>
 
@@ -28,8 +32,8 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
-MappedInputManager mappedInputManager(gpio);
 GfxRenderer renderer(display);
+MappedInputManager mappedInputManager(gpio, renderer);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 FontCacheManager fontCacheManager(renderer.getFontMap());
@@ -277,6 +281,10 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
+#if FREEINK_CAP_FRONTLIGHT
+  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, true);
+#endif
+
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -403,6 +411,13 @@ void loop() {
   // Placed after sleep guards so we never queue a render that won't be processed.
   if (gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
+  }
+
+  // Capacitive Home key (X4 Pro / GT911): a long press jumps straight to the home
+  // screen from anywhere, independent of however many activities are on the stack.
+  // No-op on boards without a home key (gpio.hasHomeKey() is false there).
+  if (mappedInputManager.wasHomeGesture()) {
+    activityManager.goHome();
   }
 
   const unsigned long activityStartTime = millis();

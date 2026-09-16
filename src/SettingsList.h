@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <I18n.h>
 
 #include <vector>
@@ -39,6 +40,17 @@ inline const std::vector<SettingInfo>& getSettingsList() {
                           StrId::STR_CAT_DISPLAY),
       SettingInfo::Toggle(StrId::STR_DISPLAY_INVERT, &CrossPointSettings::displayInvert, "displayInvert",
                           StrId::STR_CAT_DISPLAY),
+#if FREEINK_CAP_FRONTLIGHT
+      // Frontlight controls only exist on boards that have one (e.g. X4 Pro); the
+      // capability macro keeps this list -- and the settings screen it drives --
+      // free of the entries entirely on boards with no LEDC channel to control.
+      SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 10},
+                         "frontlightBrightness", StrId::STR_CAT_DISPLAY),
+#if FREEINK_CAP_WARMLIGHT
+      SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 10},
+                         "frontlightWarmth", StrId::STR_CAT_DISPLAY),
+#endif
+#endif
 
       // --- Reader ---
       SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,

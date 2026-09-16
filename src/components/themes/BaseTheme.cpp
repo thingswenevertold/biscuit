@@ -186,6 +186,11 @@ bool BaseTheme::drawArrowIfNeeded(const GfxRenderer& renderer, const char* label
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+  // Touch boards (X4 Pro) have no physical Back/Confirm/Up/Down buttons for this
+  // bar to label -- the hints would be pure clutter. Screens that reserved space
+  // for the bar (getNumberOfItemsPerPage(hasButtonHints=true)) just get some
+  // blank space at the bottom instead of a relayout.
+  if (gpio.hasTouch()) return;
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
