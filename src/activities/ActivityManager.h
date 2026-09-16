@@ -71,6 +71,13 @@ class ActivityManager {
   // Note: only one waiting task is supported at a time
   TaskHandle_t waitingTaskHandle = nullptr;
 
+  // Guards waitingTaskHandle. Both critical sections that touch it must use this
+  // same spinlock or they don't exclude each other. A real portMUX is mandatory on
+  // dual-core targets (S3): taskENTER_CRITICAL() dereferences it, so passing
+  // nullptr trips assert(lock) in spinlock_acquire. Single-core (C3) ignores the
+  // argument, which is why nullptr survived there.
+  portMUX_TYPE waiterMux = portMUX_INITIALIZER_UNLOCKED;
+
   // Mutex to protect rendering operations from race conditions
   // Must only be used via RenderLock
   SemaphoreHandle_t renderingMutex = nullptr;
