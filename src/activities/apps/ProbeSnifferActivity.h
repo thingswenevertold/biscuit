@@ -3,9 +3,13 @@
 #include <string>
 #include <vector>
 
-#include <freertos/portmacro.h>
-
+// activities/Activity.h must come first: it pulls in Arduino's HardwareSerial.h ->
+// esp32-hal.h -> freertos/FreeRTOS.h chain, which sets up the SMP FreeRTOS config
+// (portYIELD_CORE etc.) that ESP32-S3 (dual-core) needs before portmacro.h can be
+// parsed standalone. Including the raw header first breaks x4pro (ESP32-S3) builds;
+// it happened to work on the single-core ESP32-C3, which never exercises that guard.
 #include "activities/Activity.h"
+#include <freertos/portmacro.h>
 #include "util/ButtonNavigator.h"
 
 class ProbeSnifferActivity final : public Activity {

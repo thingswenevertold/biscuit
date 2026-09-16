@@ -10,6 +10,13 @@
 #include "../../test/mocks/ActivityManager.h"
 #else
 
+// Arduino.h must come first: it pulls in the HardwareSerial.h -> esp32-hal.h ->
+// freertos/FreeRTOS.h chain, which sets up the SMP FreeRTOS config (portYIELD_CORE
+// etc.) that ESP32-S3 (dual-core) needs before the raw freertos/*.h headers below can
+// be parsed standalone. Needed here because ActivityManager.cpp includes this header
+// first, before any other Arduino-pulling header. It happened to work on the
+// single-core ESP32-C3, which never exercises that guard.
+#include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>

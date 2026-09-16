@@ -1,4 +1,8 @@
 #pragma once
+// Arduino.h must come first: see the note in NetworkMonitorActivity.h / this
+// project's other raw-freertos-header activities. ESP32-S3 (dual-core) needs
+// its FreeRTOS SMP config set up before portmacro.h can be parsed standalone.
+#include <Arduino.h>
 #include <cstdint>
 #include <vector>
 #include <esp_wifi.h>
