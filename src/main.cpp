@@ -265,8 +265,11 @@ void setup() {
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
-      gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+      if (SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP && !gpio.verifyPowerButtonWakeup()) {
+        // verifyPowerButtonWakeup() returned false: the button was released
+        // before the wake was confirmed stable. Go back to sleep.
+        powerManager.startDeepSleep(gpio);
+      }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
