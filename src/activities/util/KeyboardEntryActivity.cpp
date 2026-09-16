@@ -57,6 +57,57 @@ char KeyboardEntryActivity::getSelectedChar() const {
   return layout[selectedRow][selectedCol];
 }
 
+bool KeyboardEntryActivity::hitTestKey(int& outRow, int& outCol) const {
+  if (!mappedInput.hasTouch()) return false;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Only the bottom-aligned layout has a Y origin derivable outside render().
+  if (!metrics.keyboardBottomAligned) return false;
+
+  int tapX = 0;
+  int tapY = 0;
+  if (!mappedInput.wasScreenTapped(tapX, tapY)) return false;
+
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int keyWidth = metrics.keyboardKeyWidth;
+  const int keyHeight = metrics.keyboardKeyHeight;
+  const int keySpacing = metrics.keyboardKeySpacing;
+  const int keyStep = keyWidth + keySpacing;
+
+  // Mirrors render(): keep these two in lockstep or taps land on the wrong key.
+  const int keyboardStartY =
+      pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - (keyHeight + keySpacing) * NUM_ROWS;
+  const int leftMargin = (pageWidth - KEYS_PER_ROW * keyStep) / 2;
+
+  const int row = (tapY - keyboardStartY) / (keyHeight + keySpacing);
+  if (row < 0 || row >= NUM_ROWS) return false;
+  // Reject taps in the gap between rows rather than snapping to a neighbour.
+  if ((tapY - keyboardStartY) % (keyHeight + keySpacing) > keyHeight) return false;
+
+  const int col = (tapX - leftMargin) / keyStep;
+  if (col < 0 || col >= getRowLength(row)) return false;
+
+  outRow = row;
+  // The special row draws four multi-column keys; snap to each one's base
+  // logical column so handleKeyPress() sees exactly what arrow-key selection
+  // would have produced.
+  if (row == SPECIAL_ROW) {
+    if (col < SPACE_COL) {
+      outCol = SHIFT_COL;
+    } else if (col < BACKSPACE_COL) {
+      outCol = SPACE_COL;
+    } else if (col < DONE_COL) {
+      outCol = BACKSPACE_COL;
+    } else {
+      outCol = DONE_COL;
+    }
+  } else {
+    outCol = col;
+  }
+  return true;
+}
+
 bool KeyboardEntryActivity::handleKeyPress() {
   // Handle special row (bottom row with shift, space, backspace, done)
   if (selectedRow == SPECIAL_ROW) {
@@ -181,6 +232,18 @@ void KeyboardEntryActivity::loop() {
       requestUpdate();
     }
     // If handleKeyPress returns false, it means onComplete was triggered, no update needed
+  }
+
+  // Touch: tapping a key moves the selection onto it and presses it in one
+  // gesture, reusing the exact same activation path as Confirm.
+  int tappedRow = 0;
+  int tappedCol = 0;
+  if (hitTestKey(tappedRow, tappedCol)) {
+    selectedRow = tappedRow;
+    selectedCol = tappedCol;
+    if (handleKeyPress()) {
+      requestUpdate();
+    }
   }
 
   // Cancel

@@ -72,4 +72,10 @@ class KeyboardEntryActivity : public Activity {
   char getSelectedChar() const;
   bool handleKeyPress();  // false if onComplete was triggered
   int getRowLength(int row) const;
+  // Maps a touch tap to a logical (row, col) in the same coordinate space the
+  // arrow-key selection uses, so a tap can reuse handleKeyPress() unchanged.
+  // Only supported while the keyboard is bottom-aligned: otherwise its Y origin
+  // depends on the wrapped input-text height, which is only known inside
+  // render(). Bottom-aligned is exactly the touch-board configuration.
+  bool hitTestKey(int& outRow, int& outCol) const;
 };
