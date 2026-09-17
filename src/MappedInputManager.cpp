@@ -196,14 +196,17 @@ bool MappedInputManager::wasHomeKeyTapped() const { return gpio.hasHomeKey() && 
 bool MappedInputManager::wasHomeGesture() const { return gpio.hasHomeKey() && gpio.wasHomeKeyLongPressed(); }
 
 bool MappedInputManager::wasPressed(const Button button) const {
-  if (button == Button::Confirm && wasHomeKeyTapped()) return true;
-  if (button == Button::Back && wasBackGesture()) return true;
+  // Home key: a short tap goes Back (previous page), a long hold goes to the
+  // home screen (handled in the main loop via wasHomeGesture()). The SDK
+  // suppresses the tap when a hold already fired the long-press, so the two
+  // never both trigger. Confirm has no physical key on the X4 Pro -- it comes
+  // from tapping the target directly (lists, tiles, dialogs, keyboard).
+  if (button == Button::Back && (wasBackGesture() || wasHomeKeyTapped())) return true;
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
-  if (button == Button::Confirm && wasHomeKeyTapped()) return true;
-  if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Back && (wasBackGesture() || wasHomeKeyTapped())) return true;
   return mapButton(button, &HalGPIO::wasReleased);
 }
 
