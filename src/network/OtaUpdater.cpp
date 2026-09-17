@@ -8,7 +8,21 @@
 #include "esp_wifi.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/yattsu/biscuit/releases/latest";
+// Release feed to check. Overridable at build time so a fork can ship its own
+// firmware without editing source.
+#ifndef OTA_RELEASE_URL
+#define OTA_RELEASE_URL "https://api.github.com/repos/thingswenevertold/biscuit/releases/latest"
+#endif
+constexpr char latestReleaseUrl[] = OTA_RELEASE_URL;
+
+// Release asset to flash. Device-specific so an OTA never cross-flashes a build
+// for a different SoC (a C3 image on the S3 X4 Pro, or vice versa, would hang or
+// brick the device). Each env sets its own name; the release must carry a
+// matching asset. Defaults to the historical "firmware.bin" for the C3 X4 build.
+#ifndef OTA_ASSET_NAME
+#define OTA_ASSET_NAME "firmware.bin"
+#endif
+constexpr char otaAssetName[] = OTA_ASSET_NAME;
 
 /* This is buffer and size holder to keep upcoming data from latestReleaseUrl */
 char* local_buf;
@@ -142,7 +156,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   latestVersion = doc["tag_name"].as<std::string>();
 
   for (int i = 0; i < doc["assets"].size(); i++) {
-    if (doc["assets"][i]["name"] == "firmware.bin") {
+    if (doc["assets"][i]["name"] == otaAssetName) {
       otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
       otaSize = doc["assets"][i]["size"].as<size_t>();
       totalSize = otaSize;
@@ -152,7 +166,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   }
 
   if (!updateAvailable) {
-    LOG_ERR("OTA", "No firmware.bin asset found");
+    LOG_ERR("OTA", "No %s asset found in release", otaAssetName);
     return NO_UPDATE;
   }
 
