@@ -203,7 +203,10 @@ class CrossPointSettings {
   // Ghosting cleanup: promote every Nth fast refresh to a full one to scrub
   // residue left by partial waveforms. Lower = cleaner, higher = faster
   // (a full refresh costs ~3x a fast one). 0 disables it.
-  uint8_t ghostCleanupInterval = 8;
+  // Default OFF: promoting a fast refresh to full mid-sequence can wedge the
+  // reader's grayscale/async refresh flow. Re-enable only once the promotion is
+  // proven safe there (must skip grayscale/async paths). See HalDisplay.
+  uint8_t ghostCleanupInterval = 0;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
